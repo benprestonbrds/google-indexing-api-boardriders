@@ -1,4 +1,6 @@
-Created by Steve at Journey Further SEO
+##google-indexing-api-bulk##
+
+Created by Steve at Journey Further SEOCreated by Steve at Journey Further SEO
 
 Requires node.js - https://nodejs.org/en/download/
 
