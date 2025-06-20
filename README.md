@@ -1,4 +1,4 @@
-##google-indexing-api-bulk##
+**google-indexing-api-bulk**
 
 Created by Steve at Journey Further SEOCreated by Steve at Journey Further SEO
 
@@ -32,7 +32,8 @@ Go to Google Webmaster Central
 Click your verified property
 Scroll down and click 'Add an owner'.
 Add your service account email address as an owner to the property.
-Quotas
+
+**Quotas**
 100 URLs per request batch
 
 200 URLs per day
