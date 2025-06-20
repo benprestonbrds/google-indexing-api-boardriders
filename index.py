@@ -10,19 +10,19 @@ from googleapiclient.discovery import build
 import streamlit as st
 import pytz
 
-# Streamlit 應用介面
-st.header("Google 索引提交工具", divider='rainbow')
+# Streamlit application interface
+st.header("Google Index submission tool", divider='rainbow')
 
-# 讀取所有的 secrets
+# read all secrets
 all_secrets = st.secrets
 
-# 創建一個選單讓使用者選擇要使用的 secrets
-selected_secret = st.selectbox('請選擇要使用的 api，大量戳請選 AMP 並授權相關信箱！', list(all_secrets.keys()))
+# Create a menu to let the user choose which secrets
+selected_secret = st.selectbox('Please select the API you want to use. For bulk use, please select AMP and authorize the relevant mailbox！', list(all_secrets.keys()))
 
-# 使用選擇的 secrets
+# Use selected secrets
 secrets = all_secrets[selected_secret]
 
-# 建立服務帳戶金鑰
+# Create a service account key
 service_account_info = {
     "type": secrets["type"],
     "project_id": secrets["project_id"],
@@ -40,16 +40,16 @@ credentials = service_account.Credentials.from_service_account_info(
     service_account_info, scopes=["https://www.googleapis.com/auth/indexing"]
 )
 
-# 建立 Google API 客戶端
+# Building a Google API client
 google_client = build("indexing", "v3", credentials=credentials)
 
-# 使用文件
-st.markdown("Index api 工具使用文件：[https://bit.ly/45mHyGJ](https://bit.ly/45mHyGJ)")
+# working with files
+st.markdown("Index api Tool usage files：[https://bit.ly/45mHyGJ](https://bit.ly/45mHyGJ)")
 st.markdown('''
-    :rainbow[請統一由 SEO Team 負責的專員協助處理]。''')
+    :rainbow[Please ask the SEO Team to assit you]。''')
 
-urls_input = st.text_area("請輸入要提交的網址（每行一個）")
-submit_button = st.button("提交")
+urls_input = st.text_area("Please enter the URL to submit（one per line）")
+submit_button = st.button("Submit")
 
 if submit_button and urls_input:
     urls = urls_input.strip().split("\n")
@@ -70,14 +70,14 @@ if submit_button and urls_input:
 
     for url, response in responses:
         if isinstance(response, HttpError):
-            st.error(f"{url} | 提交失敗，是不是客戶授權失敗啦！")
+            st.error(f"{url} | Submission failed, is it because the customer authorisation failed!")
         else:
             notify_time_str = response.get("urlNotificationMetadata", {}).get("latestUpdate", {}).get("notifyTime", "")
             notify_time = datetime.strptime(notify_time_str.split('.')[0].rstrip('Z'), "%Y-%m-%dT%H:%M:%S").replace(tzinfo=timezone.utc)
             notify_time = notify_time.replace(microsecond=0)
 
-            # 將時間轉換為 UTC+8
-            tz = pytz.timezone('Asia/Taipei')
-            notify_time = notify_time.astimezone(tz)
+            # Convert time to UTC+10
+            tz = pytz.timezone('Australia/Brisbane')
+            notify_time = notify_time.astimezone(brisbane_tz)
 
-            st.success(f"{url} | 提交成功，提交時間為 {notify_time.strftime('%Y年%m月%d日 %H:%M')}")
+            st.success(f"{url} | Submission successful, submission time is {notify_time.strftime('%Y年%m月%d日 %H:%M')}")
