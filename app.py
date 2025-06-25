@@ -38,13 +38,14 @@ elif option == "Use a shared service account":
     st.markdown("### Step 1: Select a service account from the list below.")
     all_secrets = st.secrets
 
-# 🐛 DEBUG: Show what secrets are available
-st.write("✅ Secrets loaded from .streamlit/secrets.toml:", list(all_secrets.keys()))
+    if not all_secrets:
+        st.error("❌ No shared service accounts found. Please upload a JSON key instead.")
+        st.stop()
 
-selected_secret = st.selectbox(
-    'Each account has a daily quota of 200 URLs. If one fails, please select another.',
-    list(all_secrets.keys())
-)
+    selected_secret = st.selectbox(
+        'Each account has a daily quota of 200 URLs. If one fails, please select another.',
+        list(all_secrets.keys())
+    )
 
     try:
         secrets = all_secrets[selected_secret]
@@ -123,3 +124,4 @@ if google_client:
                     st.success(f"✅ {url} — Submitted successfully at {notify_time}.")
                 else:
                     st.success(f"✅ {url} — Submitted successfully.")
+                    
