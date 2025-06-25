@@ -1,105 +1,126 @@
 import json
+import re
 from datetime import datetime, timezone
 from google.oauth2 import service_account
 from googleapiclient.errors import HttpError
 from googleapiclient.discovery import build
 import streamlit as st
 
-
-# Streamlit Header
+# Streamlit UI
 st.header("Boardriders SPAC Google Indexing API", divider='rainbow')
 
-
+# Step 1: Select Auth Method
 option = st.radio("Select an option:", ("Use a shared service account", "Upload JSON secrets"))
 
+# Initialize shared variables
+google_client = None
+client_email = None
 
-
+# === Option 1: Upload JSON Service Account File ===
 if option == "Upload JSON secrets":
-    # Let users upload their secrets, which is a JSON file
-    # STEP 2
     st.markdown("### Step 2: Upload the JSON secrets file for your service account below:")
     uploaded_file = st.file_uploader("", type="json")
+
     if uploaded_file is not None:
-        secrets = json.load(uploaded_file)
-        service_account_info = secrets
+        try:
+            secrets = json.load(uploaded_file)
+            credentials = service_account.Credentials.from_service_account_info(
+                secrets, scopes=["https://www.googleapis.com/auth/indexing"]
+            )
+            google_client = build("indexing", "v3", credentials=credentials)
+            client_email = secrets.get("client_email", "Unknown")
+        except Exception:
+            st.error("❌ Invalid JSON file. Please upload a valid Google service account key.")
+            st.stop()
+
+# === Option 2: Use Shared Secrets from .streamlit/secrets.toml ===
+elif option == "Use a shared service account":
+    st.markdown("### Step 1: Select a service account from the list below.")
+    all_secrets = st.secrets
+
+    if not all_secrets:
+        st.error("❌ No shared service accounts found. Please upload a JSON key instead.")
+        st.stop()
+
+    selected_secret = st.selectbox(
+        'Each account has a daily quota of 200 URLs. If one fails, please select another.',
+        list(all_secrets.keys())
+    )
+
+    try:
+        secrets = all_secrets[selected_secret]
+
+        # Extract credentials
+        required_keys = [
+            "type", "project_id", "private_key_id", "private_key", "client_email",
+            "client_id", "auth_uri", "token_uri",
+            "auth_provider_x509_cert_url", "client_x509_cert_url"
+        ]
+        service_account_info = {key: secrets[key] for key in required_keys}
+
         credentials = service_account.Credentials.from_service_account_info(
             service_account_info, scopes=["https://www.googleapis.com/auth/indexing"]
         )
         google_client = build("indexing", "v3", credentials=credentials)
         client_email = secrets["client_email"]
 
+        st.markdown("### Step 2: Add the following account as a delegated owner in Google Search Console:")
+        st.code(client_email, language="none")
 
-elif option == "Use a shared service account":
-    # Display the list of service accounts and let users select one
-    
-    # STEP 1
-    st.markdown("### Step 1: Select a service account from the list below.")
-    all_secrets = st.secrets
-    selected_secret = st.selectbox('Each account has a daily quota of 200 URLs. If one fails, please select another.', list(all_secrets.keys()))
-    secrets = all_secrets[selected_secret]
+    except KeyError as e:
+        st.error(f"❌ Missing key in secrets: {e}")
+        st.stop()
+    except Exception as e:
+        st.error("❌ Failed to initialize the shared service account.")
+        st.exception(e)
+        st.stop()
 
-    service_account_info = {
-        "type": secrets["type"],
-        "project_id": secrets["project_id"],
-        "private_key_id": secrets["private_key_id"],
-        "private_key": secrets["private_key"],
-        "client_email": secrets["client_email"],
-        "client_id": secrets["client_id"],
-        "auth_uri": secrets["auth_uri"],
-        "token_uri": secrets["token_uri"],
-        "auth_provider_x509_cert_url": secrets["auth_provider_x509_cert_url"],
-        "client_x509_cert_url": secrets["client_x509_cert_url"],
-    }
+# === Step 3: Submit URLs ===
+if google_client:
+    st.markdown("### Step 3: Provide a list of URLs to request indexing for, then submit.")
+    urls_input = st.text_area("Enter up to 100 URLs, one per line:")
+    submit_button = st.button("Submit")
 
-    credentials = service_account.Credentials.from_service_account_info(
-        service_account_info, scopes=["https://www.googleapis.com/auth/indexing"]
-    )
+    if submit_button and urls_input:
+        raw_urls = urls_input.strip().split("\n")
+        urls = [url.strip() for url in raw_urls if url.strip()]
+        url_pattern = re.compile(r'^https?://')
+        invalid_urls = [url for url in urls if not url_pattern.match(url)]
 
-    google_client = build("indexing", "v3", credentials=credentials)
+        if invalid_urls:
+            st.warning("⚠️ Some URLs are invalid and will be skipped:")
+            st.write(invalid_urls)
+            urls = [url for url in urls if url_pattern.match(url)]
 
-    # STEP 2
-    st.markdown("### Step 2: Add the following account as a delegated owner in Google Search Console for the website for which you wish to submit URLs:")
-    client_email = secrets["client_email"]
-    st.markdown(client_email)
+        def submit_urls(urls):
+            responses = []
+            for url in urls:
+                try:
+                    response = google_client.urlNotifications().publish(
+                        body={"url": url, "type": "URL_UPDATED"}
+                    ).execute()
+                    responses.append((url, response))
+                except HttpError as e:
+                    responses.append((url, e))
+            return responses
 
+        responses = submit_urls(urls)
 
-# STEP 3 
-st.markdown("### Step 3: Provide a list of URLs that you would like to request indexing for, then submit.")
-urls_input = st.text_area("Enter up to 100 URLs you wish to submit, one URL per line.")
-submit_button = st.button("Submit")
-
-if submit_button and urls_input:
-    urls = urls_input.strip().split("\n")
-
-    def submit_urls(urls):
-        responses = []
-        for url in urls:
-            try:
-                response = google_client.urlNotifications().publish(
-                    body={"url": url, "type": "URL_UPDATED"}
-                ).execute()
-                # st.write(f"API Response: {response}")
-                
-                responses.append((url, response))
-            except HttpError as e:
-                responses.append((url, e))
-        return responses
-
-    responses = submit_urls(urls)
-
-    for url, response in responses:
-        if isinstance(response, HttpError):
-            error_message = response.content.decode("utf-8")
-            if "Permission denied. Failed to verify the URL ownership" in error_message:
-                st.error(f"Permission denied. Failed to verify the URL ownership. Please add '{client_email}' as an 'Owner' in Google Search Console.")
+        for url, response in responses:
+            if isinstance(response, HttpError):
+                error_message = response.content.decode("utf-8")
+                if "Permission denied. Failed to verify the URL ownership" in error_message:
+                    st.error(f"❌ {url} — Failed: Please add '{client_email}' as an **Owner** in Google Search Console.")
+                else:
+                    st.error(f"❌ {url} — API Error: {error_message}")
+                    st.info("Contact Ben Preston for help if this persists.")
             else:
-                st.error(f"Error Message: {error_message}")
-                st.error("Please contact Ben Preston for assistance.")
-        else:
-            notify_time_str = response.get("urlNotificationMetadata", {}).get("latestUpdate", {}).get("notifyTime", "")
-            if notify_time_str:
-                notify_time = datetime.strptime(notify_time_str.split('.')[0].rstrip('Z'), "%Y-%m-%dT%H:%M:%S").replace(tzinfo=timezone.utc)
-                notify_time = notify_time.replace(microsecond=0)
-                st.success(f"{url} | URL submitted successfully at {notify_time}.")
-            else:
-                st.success(f"{url} | URL submitted successfully. Response: {response}")
+                notify_time_str = response.get("urlNotificationMetadata", {}).get("latestUpdate", {}).get("notifyTime", "")
+                if notify_time_str:
+                    notify_time = datetime.strptime(
+                        notify_time_str.split('.')[0].rstrip('Z'),
+                        "%Y-%m-%dT%H:%M:%S"
+                    ).replace(tzinfo=timezone.utc).replace(microsecond=0)
+                    st.success(f"✅ {url} — Submitted successfully at {notify_time}.")
+                else:
+                    st.success(f"✅ {url} — Submitted successfully.")
