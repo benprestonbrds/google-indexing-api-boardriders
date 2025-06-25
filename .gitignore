@@ -1,2 +1,15 @@
+# Don't commit notebooks (if any)
 test.ipynb
+
+# Ignore raw service account JSON keys (for security)
 *.json
+
+# But allow Streamlit config
+!.streamlit/
+!.streamlit/secrets.toml
+
+# VS Code settings (optional)
+.vscode/
+__pycache__/
+*.pyc
+.env
